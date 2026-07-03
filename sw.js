@@ -6,7 +6,11 @@ const ASSETS = [
   './manifest.json',
   './icons/icon-192.png',
   './icons/icon-512.png',
-  './assets/player.png'
+  './assets/player.png',
+  './assets/battle_player.png',
+  './assets/enemy_slime.png',
+  './assets/enemy_beetle.png',
+  './assets/enemy_wisp.png'
 ];
 
 self.addEventListener('install', (event) => {

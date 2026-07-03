@@ -48,7 +48,15 @@ const SPRITE_FRAME = 32;
 const FACING_ROWS = { down: 0, left: 1, right: 2, up: 3 };
 let facing = 'down';
 let animFrame = 0; // 0 = stand, 1/2 = walk frames
-let animTimer = 0;
+
+const battlePlayerSprite = new Image();
+battlePlayerSprite.src = 'assets/battle_player.png';
+
+function loadEnemySprite(file) {
+  const img = new Image();
+  img.src = `assets/${file}`;
+  return img;
+}
 
 function statsForLevel(level) {
   return {
@@ -112,6 +120,8 @@ function drawWorld() {
   ctx.fillText(`Lv ${party.level}  XP ${party.xp}/${party.xpToNext}`, 10, 18);
 }
 
+let stepToggle = false;
+
 function updateWorld() {
   if (moving) {
     const targetX = playerTile.x * TILE + TILE / 2;
@@ -119,11 +129,6 @@ function updateWorld() {
     const speed = 6;
     const dx = targetX - playerPixel.x;
     const dy = targetY - playerPixel.y;
-
-    animTimer++;
-    if (animTimer % 6 === 0) {
-      animFrame = animFrame === 1 ? 2 : 1;
-    }
 
     if (Math.abs(dx) <= speed && Math.abs(dy) <= speed) {
       playerPixel.x = targetX;
@@ -150,6 +155,8 @@ function updateWorld() {
   const newY = playerTile.y + dy;
   if (isBlocked(newX, newY)) return;
 
+  stepToggle = !stepToggle;
+  animFrame = stepToggle ? 1 : 2;
   playerTile = { x: newX, y: newY };
   moving = true;
 }
@@ -166,16 +173,20 @@ function checkEncounter(x, y) {
 // ---------- Battle ----------
 
 const ENEMY_TYPES = [
-  { name: 'Cave Slime', maxHp: 20, atk: 4, xp: 12 },
-  { name: 'Rock Beetle', maxHp: 28, atk: 6, xp: 18 },
-  { name: 'Marsh Wisp', maxHp: 16, atk: 5, xp: 14 },
+  { name: 'Cave Slime', maxHp: 20, atk: 4, xp: 12, sprite: 'enemy_slime.png' },
+  { name: 'Rock Beetle', maxHp: 28, atk: 6, xp: 18, sprite: 'enemy_beetle.png' },
+  { name: 'Marsh Wisp', maxHp: 16, atk: 5, xp: 14, sprite: 'enemy_wisp.png' },
 ];
+
+const enemySprites = {};
+ENEMY_TYPES.forEach((t) => { enemySprites[t.sprite] = loadEnemySprite(t.sprite); });
 
 let enemy = null;
 let battleOver = false;
 let playerTurn = true;
 let selectedIndex = 0;
-const menuItems = ['Attack', 'Fire', 'Potion', 'Ether', 'Run'];
+let defending = false;
+const menuItems = ['Attack', 'Defend', 'Fire', 'Potion', 'Ether', 'Run'];
 let battleLog = '';
 
 function startBattle() {
@@ -185,6 +196,7 @@ function startBattle() {
   battleOver = false;
   playerTurn = true;
   selectedIndex = 0;
+  defending = false;
   battleLog = `A wild ${enemy.name} appears!`;
   hintEl.textContent = BATTLE_HINT;
 }
@@ -211,10 +223,15 @@ function rand(min, max) {
 }
 
 function doAction(action) {
+  defending = false;
+
   if (action === 'Attack') {
     const dmg = rand(party.atk - 2, party.atk + 2);
     enemy.hp = Math.max(0, enemy.hp - dmg);
     battleLog = `${party.name} attacks for ${dmg} damage!`;
+  } else if (action === 'Defend') {
+    defending = true;
+    battleLog = `${party.name} braces for the next attack!`;
   } else if (action === 'Fire') {
     if (party.mp < 4) {
       battleLog = 'Not enough MP!';
@@ -268,9 +285,15 @@ function doAction(action) {
 }
 
 function enemyTurn() {
-  const dmg = rand(enemy.atk - 1, enemy.atk + 2);
+  let dmg = rand(enemy.atk - 1, enemy.atk + 2);
+  if (defending) {
+    dmg = Math.floor(dmg / 2);
+  }
   party.hp = Math.max(0, party.hp - dmg);
-  battleLog = `${enemy.name} attacks for ${dmg} damage!`;
+  battleLog = defending
+    ? `${enemy.name} attacks for ${dmg} damage! (Defended)`
+    : `${enemy.name} attacks for ${dmg} damage!`;
+  defending = false;
 
   if (party.hp <= 0) {
     battleLog = `${party.name} was defeated... Game over.`;
@@ -286,6 +309,14 @@ function enemyTurn() {
   playerTurn = true;
 }
 
+function drawSpriteAnchored(img, cx, bottomY, maxW, maxH) {
+  if (!img.complete || img.naturalWidth === 0) return;
+  const scale = Math.min(maxW / img.naturalWidth, maxH / img.naturalHeight);
+  const w = img.naturalWidth * scale;
+  const h = img.naturalHeight * scale;
+  ctx.drawImage(img, cx - w / 2, bottomY - h, w, h);
+}
+
 function drawBattle() {
   ctx.fillStyle = '#150e2b';
   ctx.fillRect(0, 0, canvas.width, canvas.height);
@@ -294,10 +325,7 @@ function drawBattle() {
   ctx.font = 'bold 22px sans-serif';
   ctx.fillText('BATTLE', 20, 34);
 
-  ctx.fillStyle = '#5b2a86';
-  ctx.beginPath();
-  ctx.arc(460, 110, 44, 0, Math.PI * 2);
-  ctx.fill();
+  drawSpriteAnchored(enemySprites[enemy.sprite], 460, 150, 90, 90);
   ctx.fillStyle = '#ffffff';
   ctx.font = '16px sans-serif';
   ctx.fillText(enemy.name, 400, 175);
@@ -305,10 +333,7 @@ function drawBattle() {
   ctx.font = '14px sans-serif';
   ctx.fillText(`HP: ${enemy.hp}/${enemy.maxHp}`, 400, 195);
 
-  ctx.fillStyle = '#ffcc66';
-  ctx.beginPath();
-  ctx.arc(110, 110, 36, 0, Math.PI * 2);
-  ctx.fill();
+  drawSpriteAnchored(battlePlayerSprite, 110, 165, 90, 110);
   ctx.fillStyle = '#ffffff';
   ctx.font = '16px sans-serif';
   ctx.fillText(party.name, 60, 175);
@@ -325,7 +350,7 @@ function drawBattle() {
   menuItems.forEach((label, i) => {
     ctx.fillStyle = i === selectedIndex ? '#ffcc66' : '#ffffff';
     ctx.font = '18px sans-serif';
-    ctx.fillText((i === selectedIndex ? '> ' : '  ') + label, 20, 300 + i * 28);
+    ctx.fillText((i === selectedIndex ? '> ' : '  ') + label, 20, 300 + i * 24);
   });
 }
 
