@@ -44,10 +44,11 @@ hintEl.textContent = WORLD_HINT;
 
 const playerSprite = new Image();
 playerSprite.src = 'assets/player.png';
-const SPRITE_FRAME = 32;
+const FRAME_W = 56;
+const FRAME_H = 72;
 const FACING_ROWS = { down: 0, left: 1, right: 2, up: 3 };
 let facing = 'down';
-let animFrame = 0; // 0 = stand, 1/2 = walk frames
+let animFrame = 0; // 0 = stand, 1/2 = bob frames
 
 const battlePlayerSprite = new Image();
 battlePlayerSprite.src = 'assets/battle_player.png';
@@ -103,12 +104,13 @@ function drawWorld() {
   }
 
   const row = FACING_ROWS[facing];
-  const drawSize = TILE * 1.1;
+  const drawW = TILE * 1.15;
+  const drawH = TILE * 1.5;
   if (playerSprite.complete && playerSprite.naturalWidth > 0) {
     ctx.drawImage(
       playerSprite,
-      animFrame * SPRITE_FRAME, row * SPRITE_FRAME, SPRITE_FRAME, SPRITE_FRAME,
-      playerPixel.x - drawSize / 2, playerPixel.y - drawSize / 2, drawSize, drawSize
+      animFrame * FRAME_W, row * FRAME_H, FRAME_W, FRAME_H,
+      playerPixel.x - drawW / 2, playerPixel.y - drawH * 0.72, drawW, drawH
     );
   }
 
@@ -176,6 +178,7 @@ const ENEMY_TYPES = [
   { name: 'Cave Slime', maxHp: 20, atk: 4, xp: 12, sprite: 'enemy_slime.png' },
   { name: 'Rock Beetle', maxHp: 28, atk: 6, xp: 18, sprite: 'enemy_beetle.png' },
   { name: 'Marsh Wisp', maxHp: 16, atk: 5, xp: 14, sprite: 'enemy_wisp.png' },
+  { name: 'Goblin Raider', maxHp: 24, atk: 7, xp: 20, sprite: 'enemy_goblin.png' },
 ];
 
 const enemySprites = {};

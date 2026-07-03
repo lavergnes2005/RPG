@@ -10,7 +10,8 @@ const ASSETS = [
   './assets/battle_player.png',
   './assets/enemy_slime.png',
   './assets/enemy_beetle.png',
-  './assets/enemy_wisp.png'
+  './assets/enemy_wisp.png',
+  './assets/enemy_goblin.png'
 ];
 
 self.addEventListener('install', (event) => {
