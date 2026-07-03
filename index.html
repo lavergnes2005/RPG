@@ -20,14 +20,97 @@
       font-family: sans-serif;
     }
     #game-container {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
       box-shadow: 0 0 24px rgba(150, 90, 220, 0.4);
+    }
+    #game-canvas {
+      background: #0a0a14;
+      display: block;
+    }
+    #hint {
+      color: #cccccc;
+      font-size: 13px;
+      padding: 6px 4px;
+      text-align: center;
+      max-width: 672px;
+    }
+    canvas#game-canvas {
+      max-width: 92vw;
+      height: auto;
+    }
+    #touch-controls {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      width: 100%;
+      max-width: 500px;
+      margin-top: 14px;
+      padding: 0 10px;
+      box-sizing: border-box;
+      user-select: none;
+      -webkit-user-select: none;
+    }
+    #dpad {
+      display: grid;
+      grid-template-columns: 52px 52px 52px;
+      grid-template-rows: 52px 52px 52px;
+      gap: 4px;
+    }
+    #dpad button {
+      grid-column: auto;
+      grid-row: auto;
+    }
+    .dpad-up { grid-column: 2; grid-row: 1; }
+    .dpad-left { grid-column: 1; grid-row: 2; }
+    .dpad-right { grid-column: 3; grid-row: 2; }
+    .dpad-down { grid-column: 2; grid-row: 3; }
+    .ctrl-btn {
+      background: #2a1f4d;
+      border: 2px solid #6a4fb0;
+      color: #ffcc66;
+      font-size: 20px;
+      border-radius: 10px;
+      touch-action: none;
+      -webkit-tap-highlight-color: transparent;
+    }
+    .ctrl-btn:active {
+      background: #4a3480;
+    }
+    #action-btn {
+      width: 84px;
+      height: 84px;
+      border-radius: 50%;
+      background: #4f2a86;
+      border: 2px solid #ffcc66;
+      color: #ffcc66;
+      font-size: 16px;
+      font-weight: bold;
+      touch-action: none;
+      -webkit-tap-highlight-color: transparent;
+    }
+    #action-btn:active {
+      background: #6a3fb0;
     }
   </style>
 </head>
 <body>
-  <div id="game-container"></div>
+  <div id="game-container">
+    <canvas id="game-canvas"></canvas>
+    <div id="hint">Use the D-pad to move. Walk into tall grass to trigger a battle, then use ▲▼ and SELECT to choose an action.</div>
 
-  <script src="https://cdn.jsdelivr.net/npm/phaser@3.70.0/dist/phaser.min.js"></script>
+    <div id="touch-controls">
+      <div id="dpad">
+        <button class="ctrl-btn dpad-up" data-dir="ArrowUp">▲</button>
+        <button class="ctrl-btn dpad-left" data-dir="ArrowLeft">◀</button>
+        <button class="ctrl-btn dpad-right" data-dir="ArrowRight">▶</button>
+        <button class="ctrl-btn dpad-down" data-dir="ArrowDown">▼</button>
+      </div>
+      <button id="action-btn">SELECT</button>
+    </div>
+  </div>
+
   <script src="game.js"></script>
   <script>
     if ('serviceWorker' in navigator) {

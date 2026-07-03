@@ -1,5 +1,4 @@
-// ---------- Chlora Quest ----------
-// A small FF6-style RPG vertical slice: overworld exploration + turn-based battles.
+// ---------- Chlora Quest (pure vanilla JS, no external libraries) ----------
 
 const TILE = 48;
 const MAP_COLS = 14;
@@ -20,265 +19,367 @@ const MAP = [
 ];
 
 const TILE_COLORS = {
-  0: 0x3a6b35, // grass
-  1: 0x1f3d1c, // tree
-  2: 0x8a6b4a, // path
-  3: 0x4f8a3d, // tall grass (encounter zone)
+  0: '#3a6b35', // grass
+  1: '#1f3d1c', // tree
+  2: '#8a6b4a', // path
+  3: '#4f8a3d', // tall grass (encounter zone)
 };
 
-class WorldScene extends Phaser.Scene {
-  constructor() {
-    super('World');
-  }
+const canvas = document.getElementById('game-canvas');
+const ctx = canvas.getContext('2d');
+canvas.width = MAP_COLS * TILE;
+canvas.height = MAP_ROWS * TILE;
 
-  init(data) {
-    this.party = data.party || {
-      name: 'Ryn',
-      hp: 32, maxHp: 32,
-      mp: 12, maxMp: 12,
-      atk: 7,
-    };
-  }
+const hintEl = document.getElementById('hint');
 
-  create() {
-    this.moving = false;
-    this.playerTile = { x: 2, y: 2 };
+const playerSprite = new Image();
+playerSprite.src = 'assets/player.png';
+const SPRITE_FRAME = 32;
+const FACING_ROWS = { down: 0, left: 1, right: 2, up: 3 };
+let facing = 'down';
+let animFrame = 0; // 0 = stand, 1/2 = walk frames
+let animTimer = 0;
 
-    // Draw map
-    this.tileGroup = this.add.group();
-    for (let y = 0; y < MAP_ROWS; y++) {
-      for (let x = 0; x < MAP_COLS; x++) {
-        const tileType = MAP[y][x];
-        const rect = this.add.rectangle(
-          x * TILE + TILE / 2, y * TILE + TILE / 2, TILE - 2, TILE - 2,
-          TILE_COLORS[tileType]
-        );
-        rect.tileType = tileType;
-      }
-    }
-
-    // Player sprite (simple colored circle w/ direction marker)
-    this.player = this.add.container(
-      this.playerTile.x * TILE + TILE / 2,
-      this.playerTile.y * TILE + TILE / 2
-    );
-    const body = this.add.circle(0, 0, TILE / 3, 0xffcc66);
-    const marker = this.add.triangle(0, -TILE / 4, 0, 8, -6, -6, 6, -6, 0xffffff);
-    this.player.add([body, marker]);
-
-    this.cursors = this.input.keyboard.createCursorKeys();
-    this.wasd = this.input.keyboard.addKeys('W,A,S,D');
-
-    this.hintText = this.add.text(8, MAP_ROWS * TILE + 6,
-      'Arrow keys / WASD to move. Walk into tall grass to trigger a battle.',
-      { fontSize: '14px', color: '#cccccc' }
-    );
-
-    this.stepsSinceEncounter = 0;
-  }
-
-  isBlocked(tx, ty) {
-    if (tx < 0 || ty < 0 || ty >= MAP_ROWS || tx >= MAP_COLS) return true;
-    return MAP[ty][tx] === 1;
-  }
-
-  update() {
-    if (this.moving) return;
-
-    let dx = 0, dy = 0;
-    if (this.cursors.left.isDown || this.wasd.A.isDown) dx = -1;
-    else if (this.cursors.right.isDown || this.wasd.D.isDown) dx = 1;
-    else if (this.cursors.up.isDown || this.wasd.W.isDown) dy = -1;
-    else if (this.cursors.down.isDown || this.wasd.S.isDown) dy = 1;
-
-    if (dx === 0 && dy === 0) return;
-
-    const newX = this.playerTile.x + dx;
-    const newY = this.playerTile.y + dy;
-    if (this.isBlocked(newX, newY)) return;
-
-    this.moving = true;
-    this.playerTile = { x: newX, y: newY };
-
-    this.tweens.add({
-      targets: this.player,
-      x: newX * TILE + TILE / 2,
-      y: newY * TILE + TILE / 2,
-      duration: 160,
-      onComplete: () => {
-        this.moving = false;
-        this.checkEncounter(newX, newY);
-      },
-    });
-  }
-
-  checkEncounter(x, y) {
-    if (MAP[y][x] !== 3) return;
-    this.stepsSinceEncounter++;
-    // ~25% chance per step in tall grass, guaranteed after 6 safe steps
-    if (Math.random() < 0.25 || this.stepsSinceEncounter >= 6) {
-      this.stepsSinceEncounter = 0;
-      this.scene.start('Battle', { party: this.party });
-    }
-  }
+function statsForLevel(level) {
+  return {
+    maxHp: 26 + level * 6,
+    maxMp: 10 + level * 2,
+    atk: 5 + level * 2,
+  };
 }
 
-class BattleScene extends Phaser.Scene {
-  constructor() {
-    super('Battle');
-  }
-
-  init(data) {
-    this.party = data.party;
-    this.enemy = {
-      name: 'Cave Slime',
-      hp: 20, maxHp: 20,
-      atk: 4,
-    };
-    this.playerTurn = true;
-    this.battleOver = false;
-  }
-
-  create() {
-    this.cameras.main.setBackgroundColor('#150e2b');
-
-    this.add.text(20, 20, 'BATTLE', { fontSize: '22px', color: '#ffcc66' });
-
-    // Enemy display
-    this.add.circle(500, 140, 44, 0x5b2a86);
-    this.enemyNameText = this.add.text(440, 200, '', { fontSize: '16px', color: '#ffffff' });
-    this.enemyHpText = this.add.text(440, 220, '', { fontSize: '14px', color: '#ff8080' });
-
-    // Party display
-    this.add.circle(120, 140, 36, 0xffcc66);
-    this.partyNameText = this.add.text(70, 200, '', { fontSize: '16px', color: '#ffffff' });
-    this.partyHpText = this.add.text(70, 220, '', { fontSize: '14px', color: '#80ff80' });
-    this.partyMpText = this.add.text(70, 240, '', { fontSize: '14px', color: '#80c0ff' });
-
-    this.logText = this.add.text(20, 280, 'A wild Cave Slime appears!', {
-      fontSize: '16px', color: '#eeeeee', wordWrap: { width: 560 },
-    });
-
-    // Menu
-    this.menuItems = ['Attack', 'Fire', 'Potion', 'Run'];
-    this.menuTexts = [];
-    this.selectedIndex = 0;
-
-    this.menuItems.forEach((label, i) => {
-      const t = this.add.text(20, 340 + i * 28, label, {
-        fontSize: '18px', color: '#ffffff',
-      });
-      this.menuTexts.push(t);
-    });
-
-    this.cursors = this.input.keyboard.createCursorKeys();
-    this.enterKey = this.input.keyboard.addKey(Phaser.Input.Keyboard.KeyCodes.ENTER);
-    this.spaceKey = this.input.keyboard.addKey(Phaser.Input.Keyboard.KeyCodes.SPACE);
-
-    this.updateUI();
-  }
-
-  updateUI() {
-    this.enemyNameText.setText(this.enemy.name);
-    this.enemyHpText.setText(`HP: ${this.enemy.hp}/${this.enemy.maxHp}`);
-    this.partyNameText.setText(this.party.name);
-    this.partyHpText.setText(`HP: ${this.party.hp}/${this.party.maxHp}`);
-    this.partyMpText.setText(`MP: ${this.party.mp}/${this.party.maxMp}`);
-
-    this.menuTexts.forEach((t, i) => {
-      t.setColor(i === this.selectedIndex ? '#ffcc66' : '#ffffff');
-      t.setText((i === this.selectedIndex ? '> ' : '  ') + this.menuItems[i]);
-    });
-  }
-
-  log(msg) {
-    this.logText.setText(msg);
-  }
-
-  update() {
-    if (this.battleOver || !this.playerTurn) return;
-
-    if (Phaser.Input.Keyboard.JustDown(this.cursors.up)) {
-      this.selectedIndex = (this.selectedIndex + this.menuItems.length - 1) % this.menuItems.length;
-      this.updateUI();
-    } else if (Phaser.Input.Keyboard.JustDown(this.cursors.down)) {
-      this.selectedIndex = (this.selectedIndex + 1) % this.menuItems.length;
-      this.updateUI();
-    } else if (Phaser.Input.Keyboard.JustDown(this.enterKey) || Phaser.Input.Keyboard.JustDown(this.spaceKey)) {
-      this.handleAction(this.menuItems[this.selectedIndex]);
-    }
-  }
-
-  handleAction(action) {
-    if (action === 'Attack') {
-      const dmg = Phaser.Math.Between(this.party.atk - 2, this.party.atk + 2);
-      this.enemy.hp = Math.max(0, this.enemy.hp - dmg);
-      this.log(`${this.party.name} attacks for ${dmg} damage!`);
-    } else if (action === 'Fire') {
-      if (this.party.mp < 4) {
-        this.log('Not enough MP!');
-        this.updateUI();
-        return;
-      }
-      this.party.mp -= 4;
-      const dmg = Phaser.Math.Between(8, 14);
-      this.enemy.hp = Math.max(0, this.enemy.hp - dmg);
-      this.log(`${this.party.name} casts Fire for ${dmg} damage!`);
-    } else if (action === 'Potion') {
-      const heal = 15;
-      this.party.hp = Math.min(this.party.maxHp, this.party.hp + heal);
-      this.log(`${this.party.name} drinks a potion, recovering ${heal} HP!`);
-    } else if (action === 'Run') {
-      this.log('Got away safely!');
-      this.updateUI();
-      this.battleOver = true;
-      this.time.delayedCall(1000, () => this.scene.start('World', { party: this.party }));
-      return;
-    }
-
-    this.updateUI();
-
-    if (this.enemy.hp <= 0) {
-      this.log(`${this.enemy.name} was defeated! Victory!`);
-      this.battleOver = true;
-      this.time.delayedCall(1400, () => this.scene.start('World', { party: this.party }));
-      return;
-    }
-
-    this.playerTurn = false;
-    this.time.delayedCall(900, () => this.enemyTurn());
-  }
-
-  enemyTurn() {
-    const dmg = Phaser.Math.Between(this.enemy.atk - 1, this.enemy.atk + 2);
-    this.party.hp = Math.max(0, this.party.hp - dmg);
-    this.log(`${this.enemy.name} attacks for ${dmg} damage!`);
-    this.updateUI();
-
-    if (this.party.hp <= 0) {
-      this.log(`${this.party.name} was defeated... Game over.`);
-      this.battleOver = true;
-      this.time.delayedCall(1600, () => {
-        this.party.hp = this.party.maxHp;
-        this.party.mp = this.party.maxMp;
-        this.scene.start('World', { party: this.party });
-      });
-      return;
-    }
-
-    this.playerTurn = true;
-  }
-}
-
-const config = {
-  type: Phaser.AUTO,
-  width: MAP_COLS * TILE,
-  height: MAP_ROWS * TILE + 40,
-  parent: 'game-container',
-  backgroundColor: '#0a0a14',
-  scene: [WorldScene, BattleScene],
+const party = {
+  name: 'Ryn',
+  level: 1,
+  xp: 0,
+  xpToNext: 20,
+  ...statsForLevel(1),
 };
+party.hp = party.maxHp;
+party.mp = party.maxMp;
 
-window.addEventListener('load', () => {
-  new Phaser.Game(config);
+let state = 'world'; // 'world' or 'battle'
+let playerTile = { x: 2, y: 2 };
+let playerPixel = { x: playerTile.x * TILE + TILE / 2, y: playerTile.y * TILE + TILE / 2 };
+let moving = false;
+let stepsSinceEncounter = 0;
+
+const keys = {};
+window.addEventListener('keydown', (e) => {
+  keys[e.key] = true;
+  handleBattleInput(e.key);
 });
+window.addEventListener('keyup', (e) => { keys[e.key] = false; });
+
+function isBlocked(tx, ty) {
+  if (tx < 0 || ty < 0 || ty >= MAP_ROWS || tx >= MAP_COLS) return true;
+  return MAP[ty][tx] === 1;
+}
+
+function drawWorld() {
+  for (let y = 0; y < MAP_ROWS; y++) {
+    for (let x = 0; x < MAP_COLS; x++) {
+      ctx.fillStyle = TILE_COLORS[MAP[y][x]];
+      ctx.fillRect(x * TILE + 1, y * TILE + 1, TILE - 2, TILE - 2);
+    }
+  }
+
+  const row = FACING_ROWS[facing];
+  const drawSize = TILE * 1.1;
+  if (playerSprite.complete && playerSprite.naturalWidth > 0) {
+    ctx.drawImage(
+      playerSprite,
+      animFrame * SPRITE_FRAME, row * SPRITE_FRAME, SPRITE_FRAME, SPRITE_FRAME,
+      playerPixel.x - drawSize / 2, playerPixel.y - drawSize / 2, drawSize, drawSize
+    );
+  }
+
+  // HUD
+  ctx.fillStyle = 'rgba(0,0,0,0.5)';
+  ctx.fillRect(4, 4, 150, 20);
+  ctx.fillStyle = '#ffcc66';
+  ctx.font = '13px sans-serif';
+  ctx.fillText(`Lv ${party.level}  XP ${party.xp}/${party.xpToNext}`, 10, 18);
+}
+
+function updateWorld() {
+  if (moving) {
+    const targetX = playerTile.x * TILE + TILE / 2;
+    const targetY = playerTile.y * TILE + TILE / 2;
+    const speed = 6;
+    const dx = targetX - playerPixel.x;
+    const dy = targetY - playerPixel.y;
+
+    animTimer++;
+    if (animTimer % 6 === 0) {
+      animFrame = animFrame === 1 ? 2 : 1;
+    }
+
+    if (Math.abs(dx) <= speed && Math.abs(dy) <= speed) {
+      playerPixel.x = targetX;
+      playerPixel.y = targetY;
+      moving = false;
+      animFrame = 0;
+      checkEncounter(playerTile.x, playerTile.y);
+    } else {
+      playerPixel.x += Math.sign(dx) * Math.min(speed, Math.abs(dx));
+      playerPixel.y += Math.sign(dy) * Math.min(speed, Math.abs(dy));
+    }
+    return;
+  }
+
+  let dx = 0, dy = 0;
+  if (keys['ArrowLeft'] || keys['a'] || keys['A']) { dx = -1; facing = 'left'; }
+  else if (keys['ArrowRight'] || keys['d'] || keys['D']) { dx = 1; facing = 'right'; }
+  else if (keys['ArrowUp'] || keys['w'] || keys['W']) { dy = -1; facing = 'up'; }
+  else if (keys['ArrowDown'] || keys['s'] || keys['S']) { dy = 1; facing = 'down'; }
+
+  if (dx === 0 && dy === 0) return;
+
+  const newX = playerTile.x + dx;
+  const newY = playerTile.y + dy;
+  if (isBlocked(newX, newY)) return;
+
+  playerTile = { x: newX, y: newY };
+  moving = true;
+}
+
+function checkEncounter(x, y) {
+  if (MAP[y][x] !== 3) return;
+  stepsSinceEncounter++;
+  if (Math.random() < 0.25 || stepsSinceEncounter >= 6) {
+    stepsSinceEncounter = 0;
+    startBattle();
+  }
+}
+
+// ---------- Battle ----------
+
+const ENEMY_TYPES = [
+  { name: 'Cave Slime', maxHp: 20, atk: 4, xp: 12 },
+  { name: 'Rock Beetle', maxHp: 28, atk: 6, xp: 18 },
+  { name: 'Marsh Wisp', maxHp: 16, atk: 5, xp: 14 },
+];
+
+let enemy = null;
+let battleOver = false;
+let playerTurn = true;
+let selectedIndex = 0;
+const menuItems = ['Attack', 'Fire', 'Potion', 'Ether', 'Run'];
+let battleLog = '';
+
+function startBattle() {
+  state = 'battle';
+  const template = ENEMY_TYPES[Math.floor(Math.random() * ENEMY_TYPES.length)];
+  enemy = { ...template, hp: template.maxHp };
+  battleOver = false;
+  playerTurn = true;
+  selectedIndex = 0;
+  battleLog = `A wild ${enemy.name} appears!`;
+  hintEl.textContent = 'Use ▲▼ to choose, SELECT to confirm.';
+}
+
+function endBattleToWorld() {
+  state = 'world';
+  hintEl.textContent = 'Use the D-pad to move. Walk into tall grass to trigger a battle.';
+}
+
+function handleBattleInput(key) {
+  if (state !== 'battle' || battleOver || !playerTurn) return;
+
+  if (key === 'ArrowUp' || key === 'w' || key === 'W') {
+    selectedIndex = (selectedIndex + menuItems.length - 1) % menuItems.length;
+  } else if (key === 'ArrowDown' || key === 's' || key === 'S') {
+    selectedIndex = (selectedIndex + 1) % menuItems.length;
+  } else if (key === 'Enter' || key === ' ') {
+    doAction(menuItems[selectedIndex]);
+  }
+}
+
+function rand(min, max) {
+  return Math.floor(Math.random() * (max - min + 1)) + min;
+}
+
+function doAction(action) {
+  if (action === 'Attack') {
+    const dmg = rand(party.atk - 2, party.atk + 2);
+    enemy.hp = Math.max(0, enemy.hp - dmg);
+    battleLog = `${party.name} attacks for ${dmg} damage!`;
+  } else if (action === 'Fire') {
+    if (party.mp < 4) {
+      battleLog = 'Not enough MP!';
+      return;
+    }
+    party.mp -= 4;
+    const dmg = rand(8, 14);
+    enemy.hp = Math.max(0, enemy.hp - dmg);
+    battleLog = `${party.name} casts Fire for ${dmg} damage!`;
+  } else if (action === 'Potion') {
+    const heal = 15;
+    party.hp = Math.min(party.maxHp, party.hp + heal);
+    battleLog = `${party.name} drinks a potion, recovering ${heal} HP!`;
+  } else if (action === 'Ether') {
+    const restore = 8;
+    party.mp = Math.min(party.maxMp, party.mp + restore);
+    battleLog = `${party.name} drinks an ether, recovering ${restore} MP!`;
+  } else if (action === 'Run') {
+    battleLog = 'Got away safely!';
+    battleOver = true;
+    setTimeout(endBattleToWorld, 1000);
+    return;
+  }
+
+  if (enemy.hp <= 0) {
+    const xpGained = enemy.xp;
+    party.xp += xpGained;
+    let msg = `${enemy.name} was defeated! Gained ${xpGained} XP.`;
+
+    while (party.xp >= party.xpToNext) {
+      party.xp -= party.xpToNext;
+      party.level++;
+      party.xpToNext = party.level * 20;
+      const stats = statsForLevel(party.level);
+      party.maxHp = stats.maxHp;
+      party.maxMp = stats.maxMp;
+      party.atk = stats.atk;
+      party.hp = party.maxHp;
+      party.mp = party.maxMp;
+      msg += ` Level up! Now level ${party.level}!`;
+    }
+
+    battleLog = msg;
+    battleOver = true;
+    setTimeout(endBattleToWorld, 1800);
+    return;
+  }
+
+  playerTurn = false;
+  setTimeout(enemyTurn, 900);
+}
+
+function enemyTurn() {
+  const dmg = rand(enemy.atk - 1, enemy.atk + 2);
+  party.hp = Math.max(0, party.hp - dmg);
+  battleLog = `${enemy.name} attacks for ${dmg} damage!`;
+
+  if (party.hp <= 0) {
+    battleLog = `${party.name} was defeated... Game over.`;
+    battleOver = true;
+    setTimeout(() => {
+      party.hp = party.maxHp;
+      party.mp = party.maxMp;
+      endBattleToWorld();
+    }, 1600);
+    return;
+  }
+
+  playerTurn = true;
+}
+
+function drawBattle() {
+  ctx.fillStyle = '#150e2b';
+  ctx.fillRect(0, 0, canvas.width, canvas.height);
+
+  ctx.fillStyle = '#ffcc66';
+  ctx.font = 'bold 22px sans-serif';
+  ctx.fillText('BATTLE', 20, 34);
+
+  ctx.fillStyle = '#5b2a86';
+  ctx.beginPath();
+  ctx.arc(460, 110, 44, 0, Math.PI * 2);
+  ctx.fill();
+  ctx.fillStyle = '#ffffff';
+  ctx.font = '16px sans-serif';
+  ctx.fillText(enemy.name, 400, 175);
+  ctx.fillStyle = '#ff8080';
+  ctx.font = '14px sans-serif';
+  ctx.fillText(`HP: ${enemy.hp}/${enemy.maxHp}`, 400, 195);
+
+  ctx.fillStyle = '#ffcc66';
+  ctx.beginPath();
+  ctx.arc(110, 110, 36, 0, Math.PI * 2);
+  ctx.fill();
+  ctx.fillStyle = '#ffffff';
+  ctx.font = '16px sans-serif';
+  ctx.fillText(party.name, 60, 175);
+  ctx.fillStyle = '#80ff80';
+  ctx.font = '14px sans-serif';
+  ctx.fillText(`HP: ${party.hp}/${party.maxHp}`, 60, 195);
+  ctx.fillStyle = '#80c0ff';
+  ctx.fillText(`MP: ${party.mp}/${party.maxMp}`, 60, 213);
+
+  ctx.fillStyle = '#eeeeee';
+  ctx.font = '15px sans-serif';
+  wrapText(battleLog, 20, 250, canvas.width - 40, 18);
+
+  menuItems.forEach((label, i) => {
+    ctx.fillStyle = i === selectedIndex ? '#ffcc66' : '#ffffff';
+    ctx.font = '18px sans-serif';
+    ctx.fillText((i === selectedIndex ? '> ' : '  ') + label, 20, 300 + i * 28);
+  });
+}
+
+function wrapText(text, x, y, maxWidth, lineHeight) {
+  const words = text.split(' ');
+  let line = '';
+  let lineY = y;
+  for (let i = 0; i < words.length; i++) {
+    const testLine = line + words[i] + ' ';
+    if (ctx.measureText(testLine).width > maxWidth && line !== '') {
+      ctx.fillText(line, x, lineY);
+      line = words[i] + ' ';
+      lineY += lineHeight;
+    } else {
+      line = testLine;
+    }
+  }
+  ctx.fillText(line, x, lineY);
+}
+
+function gameLoop() {
+  ctx.clearRect(0, 0, canvas.width, canvas.height);
+  if (state === 'world') {
+    updateWorld();
+    drawWorld();
+  } else {
+    drawBattle();
+  }
+  requestAnimationFrame(gameLoop);
+}
+
+requestAnimationFrame(gameLoop);
+
+// ---------- Touch controls ----------
+
+document.querySelectorAll('#dpad button').forEach((btn) => {
+  const dir = btn.getAttribute('data-dir');
+
+  const press = (e) => {
+    e.preventDefault();
+    keys[dir] = true;
+    if (state === 'battle') {
+      handleBattleInput(dir);
+    }
+  };
+  const release = (e) => {
+    e.preventDefault();
+    keys[dir] = false;
+  };
+
+  btn.addEventListener('touchstart', press, { passive: false });
+  btn.addEventListener('touchend', release, { passive: false });
+  btn.addEventListener('touchcancel', release, { passive: false });
+  btn.addEventListener('mousedown', press);
+  btn.addEventListener('mouseup', release);
+  btn.addEventListener('mouseleave', release);
+});
+
+const actionBtn = document.getElementById('action-btn');
+const pressAction = (e) => {
+  e.preventDefault();
+  if (state === 'battle') {
+    handleBattleInput('Enter');
+  }
+};
+actionBtn.addEventListener('touchstart', pressAction, { passive: false });
+actionBtn.addEventListener('mousedown', pressAction);

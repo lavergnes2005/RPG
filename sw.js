@@ -5,7 +5,8 @@ const ASSETS = [
   './game.js',
   './manifest.json',
   './icons/icon-192.png',
-  './icons/icon-512.png'
+  './icons/icon-512.png',
+  './assets/player.png'
 ];
 
 self.addEventListener('install', (event) => {
