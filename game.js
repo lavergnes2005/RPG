@@ -29,8 +29,18 @@ const canvas = document.getElementById('game-canvas');
 const ctx = canvas.getContext('2d');
 canvas.width = MAP_COLS * TILE;
 canvas.height = MAP_ROWS * TILE;
+ctx.imageSmoothingEnabled = false;
 
 const hintEl = document.getElementById('hint');
+
+const isTouchDevice = window.matchMedia('(pointer: coarse)').matches;
+const WORLD_HINT = isTouchDevice
+  ? 'Use the D-pad to move. Walk into tall grass to trigger a battle.'
+  : 'Arrow keys or WASD to move. Walk into tall grass to trigger a battle.';
+const BATTLE_HINT = isTouchDevice
+  ? 'Use ▲▼ to choose, SELECT to confirm.'
+  : 'Use Up/Down (or W/S) to choose, Enter or Space to confirm.';
+hintEl.textContent = WORLD_HINT;
 
 const playerSprite = new Image();
 playerSprite.src = 'assets/player.png';
@@ -176,12 +186,12 @@ function startBattle() {
   playerTurn = true;
   selectedIndex = 0;
   battleLog = `A wild ${enemy.name} appears!`;
-  hintEl.textContent = 'Use ▲▼ to choose, SELECT to confirm.';
+  hintEl.textContent = BATTLE_HINT;
 }
 
 function endBattleToWorld() {
   state = 'world';
-  hintEl.textContent = 'Use the D-pad to move. Walk into tall grass to trigger a battle.';
+  hintEl.textContent = WORLD_HINT;
 }
 
 function handleBattleInput(key) {

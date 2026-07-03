@@ -39,6 +39,13 @@
     canvas#game-canvas {
       max-width: 92vw;
       height: auto;
+      image-rendering: pixelated;
+      image-rendering: crisp-edges;
+    }
+    @media (min-width: 720px) {
+      canvas#game-canvas {
+        max-width: 672px;
+      }
     }
     #touch-controls {
       display: flex;
@@ -51,6 +58,11 @@
       box-sizing: border-box;
       user-select: none;
       -webkit-user-select: none;
+    }
+    @media (hover: hover) and (pointer: fine) {
+      #touch-controls {
+        display: none;
+      }
     }
     #dpad {
       display: grid;
